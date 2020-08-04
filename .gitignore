@@ -1,0 +1,11 @@
+/.gradle
+/.idea
+/out
+/frontend/build
+/backend/build
+/shared/build
+/images
+*.iml
+*.ipr
+*.iws
+notes/
