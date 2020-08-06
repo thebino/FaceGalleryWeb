@@ -33,7 +33,7 @@ tar -C /usr/local/lib/ -xvf libtensorflow_jni-cpu-darwin-x86_64-1.15.0.tar.gz
 
 OpenCV needs to be installed
 ```shell script
-
+brew install opencv
 ```
 
 ## Installation
@@ -43,6 +43,10 @@ To build and run the app, use the included gradle wrapper:
 ```sh
 ./gradlew run
 ```
+
+## Notes
+* [Interesting links](notes/Notes.md)
+* [Tensorflow Operations](notes/detect_tensorflow_model_operations.md)
 
 ## Contributing
 
