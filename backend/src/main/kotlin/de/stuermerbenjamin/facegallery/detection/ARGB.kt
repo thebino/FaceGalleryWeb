@@ -1,5 +1,8 @@
 package de.stuermerbenjamin.facegallery.detection
 
+private const val alpha = 0.0078125f
+private const val mean = 127.5f
+
 data class ARGB(
     val a: Float,
     val r: Float,
@@ -8,8 +11,8 @@ data class ARGB(
 ) {
     constructor(r: Double, g: Double, b: Double) : this(
         1.0f,
-        ((r - 127.5) * 0.0078125).toFloat(),
-        ((g - 127.5) * 0.0078125).toFloat(),
-        ((b - 127.5) * 0.0078125).toFloat()
+        ((r - mean) * alpha).toFloat(),
+        ((g - mean) * alpha).toFloat(),
+        ((b - mean) * alpha).toFloat()
     )
 }

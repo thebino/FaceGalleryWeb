@@ -8,11 +8,22 @@ import de.stuermerbenjamin.facegallery.shared.response.ImagesResponse
 import io.ktor.application.call
 import io.ktor.auth.authenticate
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
+import io.ktor.http.content.streamProvider
+import io.ktor.request.receiveMultipart
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.routing.get
+import io.ktor.routing.post
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.tensorflow.TensorFlow
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 
 private const val imagesDir = "../images/"
 
@@ -21,6 +32,34 @@ fun Routing.image(
     detection: Detection
 ) {
     authenticate("apikey") {
+
+        // upload an image
+        post("/image") {
+            val multipart = call.receiveMultipart()
+            var name = ""
+
+            multipart.forEachPart { part ->
+                when (part) {
+                    is PartData.FormItem -> if (part.name == "name") {
+                        name = part.value
+                        println("Name: $name")
+                    }
+                    is PartData.FileItem -> {
+                        val file = File(File(imagesDir), "${System.currentTimeMillis()}-$name")
+
+                        part.streamProvider().use {inputStream ->
+                            file.outputStream().buffered().use {outputStream ->
+                                inputStream.copyToSuspend(outputStream)
+                            }
+                        }
+                    }
+                    is PartData.BinaryItem -> TODO()
+                }
+                part.dispose()
+            }
+
+            call.respond(HttpStatusCode.Created, "")
+        }
 
         // scan for new files
         get("/scan") {
@@ -91,6 +130,31 @@ fun Routing.image(
         }
     }
 }
+
+suspend fun InputStream.copyToSuspend(
+    out: OutputStream,
+    bufferSize: Int = DEFAULT_BUFFER_SIZE,
+    yieldSize: Int = 4 * 1024 * 1024,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO
+): Long {
+    return withContext(dispatcher) {
+        val buffer = ByteArray(bufferSize)
+        var bytesCopied = 0L
+        var bytesAfterYield = 0L
+        while (true) {
+            val bytes = read(buffer).takeIf { it >= 0 } ?: break
+            out.write(buffer, 0, bytes)
+            if (bytesAfterYield >= yieldSize) {
+                yield()
+                bytesAfterYield %= yieldSize
+            }
+            bytesCopied += bytes
+            bytesAfterYield += bytes
+        }
+        return@withContext bytesCopied
+    }
+}
+
 
 data class ScanResponse(val images: List<Image>)
 data class DetectResponse(val images: List<Image>)

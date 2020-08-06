@@ -42,6 +42,8 @@ private const val VERSION = "0.0.2"
 @KtorExperimentalAPI
 @Suppress("unused") // Referenced in application.conf
 fun Application.main() {
+    val useGcp = environment.config.propertyOrNull("ktor.application.gcp")?.getString()?.toBoolean() ?: false
+
     DatabaseFactory.init(
         databaseType = DatabaseType.SQLITE,
         addSampleData = true

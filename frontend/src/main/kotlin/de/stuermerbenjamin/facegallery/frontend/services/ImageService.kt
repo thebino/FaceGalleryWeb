@@ -37,7 +37,7 @@ class ImageService(val httpClient: HttpClient) {
         return httpClient.get("$baseUrl/images") {
             method = HttpMethod.Get
             headers.append("X-App-Version", "2.0.0")
-            headers.append("X-App-Name", "cgwWebApp")
+            headers.append("X-App-Name", "asdf")
             headers.append("X-Market", "de_DE")
             headers.append("Accept-Charset", "utf-8")
             headers.append("X-API-KEY", apiKey)

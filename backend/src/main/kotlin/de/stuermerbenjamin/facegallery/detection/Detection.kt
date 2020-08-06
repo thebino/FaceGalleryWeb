@@ -23,12 +23,13 @@ import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import org.tensorflow.Graph
-import org.tensorflow.Operation
 import org.tensorflow.Session
 import org.tensorflow.Tensor
+import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import javax.imageio.ImageIO
 import kotlin.math.ceil
 
 typealias RGB<T> = Array<T>
@@ -73,38 +74,116 @@ class Detection(private val modelFilePath: String) {
         val imagePath = File(File(imagesDir).canonicalPath, image.imagePath)
         println("[${image.imagePath}] path: ${imagePath.canonicalPath}")
 
+        //
+        // BufferedImage
+        //
+        val img = ImageIO.read(File(imagePath.canonicalPath))
+        println("bufferedImage: ${img.height} / ${img.width}")
+
+        val inputList = listOf(img.convertToGrayscale())
+        println("inputList: ${inputList.size}")
+
+        val input = inputList.map {
+            it.map { list ->
+                list.map { argb ->
+                    arrayOf(argb.r, argb.b, argb.g)
+                }.toTypedArray()
+            }.toTypedArray()
+        }.toTypedArray()
+
+        val result = session.runner()
+            .feed("pnet/input", Tensor.create(input))
+            .fetch("pnet/conv4-2/BiasAdd")
+            .fetch("pnet/prob1")
+            .run()[0]
+        println("result: $result")
+
+        println("DataType: " + result.dataType().name)
+        println("NumElements: " + result.numElements())
+        println("NumDimensions: " + result.numDimensions())
+
+        val copy = Array(inputList.size) {
+            Array(495) {
+                Array(950) {
+                    FloatArray(4)
+                }
+            }
+        }
+
+
+        result.copyTo(copy)
+        println(copy.size)
+
+        for (arrayOfArrays in copy) {
+            for (arrayOfArray in arrayOfArrays) {
+                var string = ""
+                for (floats in arrayOfArray) {
+                    for (float in floats) {
+                            string += "$float ,"
+                    }
+                    string += "\n"
+                }
+                println("arrayOfArray: $string")
+            }
+        }
+
+
+        //println("inputList.size: ${inputList.size}")
+        //val outputArr = Array(input.size) { FloatArray(7) }
+//        val outputArr = arrayOf<Array<Array<Array<Float>>>>()
+
+//        result.copyTo(outputArr)
+//        println("result: $outputArr")
+
+//        result.close()
+
+
+
+
+
+        //
+        // OpenCV::Mat
+        //
         val alpha = 0.0078125f
         val mean = 127.5f
 
-        val frame = Imgcodecs.imread(imagePath.canonicalPath)
+        // tmp working Matrix
         var workingImg = Mat()
+
+        // read file into Matrix
+        val frame = Imgcodecs.imread(imagePath.canonicalPath)
+
+        // convert float to scale
         frame.convertTo(workingImg, CvType.CV_32FC3)
 
         // TODO:
         //convertToGrayScale()
-        // workingImg = (workingImg - mean) * alpha
-        workingImg = workingImg.t()
-        Imgproc.cvtColor(workingImg, workingImg, Imgproc.COLOR_BGR2RGB)
+//
+//        workingImg = (workingImg - mean) * alpha
+//        workingImg = workingImg.t()
+//        Imgproc.cvtColor(workingImg, workingImg, Imgproc.COLOR_BGR2RGB)
+//
+//        val img_h = workingImg.rows()
+//        val img_w = workingImg.cols()
+//        println("[${image.imagePath}] size: $img_w / $img_h")
 
-        val img_h = workingImg.rows()
-        val img_w = workingImg.cols()
-        println("[${image.imagePath}] size: $img_w / $img_h")
 
-        val totalPnetBoxes = arrayListOf<FaceBox>()
-        val totalRnetBoxes = arrayListOf<FaceBox>()
-        val totalOnetBoxes = arrayListOf<FaceBox>()
 
-        val min_size = 40.0
-        val factor = 0.709
-        val win_list = calculateImagePyramid(img_h, img_w, min_size, factor)
-        println("[${image.imagePath}] scaled images: ${win_list.size}")
-
-        val pnet_threshold = 0.6
-        val rnet_threshold = 0.7
-        val onet_threshold = 0.9
-        for (scaleWindow in win_list) {
-            totalPnetBoxes.addAll(run_PNet(workingImg, scaleWindow))
-        }
+//        val totalPnetBoxes = arrayListOf<FaceBox>()
+//        val totalRnetBoxes = arrayListOf<FaceBox>()
+//        val totalOnetBoxes = arrayListOf<FaceBox>()
+//
+//        val min_size = 40.0
+//        val factor = 0.709
+//        val win_list = calculateImagePyramid(img_h, img_w, min_size, factor)
+//        println("[${image.imagePath}] scaled images: ${win_list.size}")
+//
+//        val pnet_threshold = 0.6
+//        val rnet_threshold = 0.7
+//        val onet_threshold = 0.9
+//        for (scaleWindow in win_list) {
+//            totalPnetBoxes.addAll(run_PNet(workingImg, scaleWindow))
+//        }
 
 //        run_RNet()
 
@@ -155,7 +234,7 @@ class Detection(private val modelFilePath: String) {
         val data = arrayListOf<ARGB>()
 
         for (i in 0 until byteLenght) {
-            data.add(ARGB(0.0f, 0.0f, 0.0f, 0.0f))
+            data.add(ARGB( 1.0f, 0.0f, 0.0f, 0.0f))
         }
 
         var p_count = 0
@@ -177,120 +256,6 @@ class Detection(private val modelFilePath: String) {
 
         Imgproc.resize(workingImage, resized, Size(scaleWindow.w, scaleWindow.h))
 
-        val inputData: Array<Float> = Array(4) { 1f; scaleWindow.w.toFloat(); scaleWindow.h.toFloat(); 3f }
-
-        val images = arrayListOf<List<List<RGB<Float>>>>()
-        val input = images.map {
-            it.map {
-                it.map {
-                    arrayOf(0.0f, 0.0f, 0.0f)
-                    //arrayOf(it.r, it.b, it.g)
-                }
-            }.toTypedArray()
-        }.toTypedArray()
-
-        val realInputs = Array(input.size) {
-                Array(48) {
-                    Array(48) {
-                        FloatArray(3)
-                    }
-                }
-            }
-
-        for (i in 0 until input.size) {
-            for (j in 0..47) {
-                for (k in 0..47) {
-                    for (l in 0..2) {
-                        realInputs[i][j][k][l] = input[i][j][k][l]
-                    }
-                }
-            }
-        }
-
-        val runner = session.runner()
-        runner.feed("pnet/input", Tensor.create(realInputs))
-
-        val output_names = arrayListOf<Operation>()
-        val result = runner
-            .fetch("pnet/conv4-2/BiasAdd")
-            .fetch("pnet/prob1")
-            .run()[0]
-
-
-        // TODO: adjust outputBuffer to 4-dimensional array
-        val outputBuffer = Array(1) { FloatArray(3) }
-        result.copyTo(outputBuffer)
-
-
-
-
-
-//        val input_name = graph.operation("pnet/input")
-//        val input_names : ArrayList<Output<Operation>> = arrayListOf()
-//        val t = Tensor()
-//        val a = graph.opBuilder().addInput(input_name).build()
-//        input_names.add(Output(input_name, 0))
-//
-//
-//        val output_names : ArrayList<GraphOperation> = arrayListOf()
-//        output_names.add(graph.operation("pnet/conv4-2/BiasAdd"))
-//        output_names.add(graph.operation("pnet/prob1"))
-//
-//        val result = session.runner()
-//            .feed("pnet/input", input)
-//            .fetch("pnet/conv4-2/BiasAdd")
-//            .run()[0]
-
-
-        // TF_NewTensor(TF_FLOAT, dim, 4, resized.ptr(), sizeof(float) * scale_w * scale_h * 3, dummy_deallocator, nullptr);
-        // TF_NewTensor(TF_DataType dtype, tensorflow::int64* dims, int num_dims, void* data, size_t len, void (*deallocator)(void* data, size_t len, void* arg), void* deallocator_arg)
-//        val localInferenceInput: Array<Float> = Array(4) {
-          //  batch, width, height, features
-//            1.0f; scaleWindow.w; scaleWindow.h; 3.0f
-//        }
-//
-//        val floatMat = Mat()
-//        workingImage.convertTo(floatMat, CV_32F)
-//        val floatBuffer: FloatBuffer = floatMat.createBuffer()
-
-//        val inputData = floatArrayOf(1f, scaleWindow.w.toFloat(), scaleWindow.h.toFloat(), 3f)
-//        val input = Tensor.create(inputData)
-
-//        val input  = localInferenceInput.map {
-//            it.toLocalInferenceInput()
-//        }.toTypedArray()
-//
-//
-//        val realInputs =
-//            Array(
-//                input.length
-//            ) {
-//                Array(
-//                    48
-//                ) { Array(48) { FloatArray(3) } }
-//            }
-//        for (i in 0 until input.length) {
-//            for (j in 0..47) {
-//                for (k in 0..47) {
-//                    for (l in 0..2) {
-//                        realInputs[i][j][k][l] = input.get(i).get(j).get(k).get(l)
-//                    }
-//                }
-//            }
-//        }
-
-//        val input1 = Tensor.create(DataType.FLOAT, localInferenceInput)
-
-        // TODO: https://github.com/JsFlo/EmotionRecServer/blob/master/infrastructure/src/main/kotlin/com/emotionrec/localtfinference/LocalInferenceService.kt
-        // TODO: https://github.com/JsFlo/EmotionRecServer/blob/master/infrastructure/src/main/java/com/emotionrec/localtfinference/JavaUtils.java
-//        val input2 = Tensor.create(0.0f)
-//        val result = session.runner()
-//            .feed("pnet/input", input)
-//            .fetch("pnet/conv4-2/BiasAdd")
-//            .run()[0]
-
-
-
         return emptyList()
     }
 
@@ -307,4 +272,27 @@ class Detection(private val modelFilePath: String) {
     private fun run_ONet(): List<FaceBox> {
         return emptyList()
     }
+}
+
+fun BufferedImage.convertToGrayscale(): List<List<ARGB>> {
+    val rowRgbList = mutableListOf<List<ARGB>>()
+    for (h in 0 until height) {
+        val rowRgb = mutableListOf<ARGB>()
+        for (w in 0 until width) {
+            val pixelComponent = getRGB(w, h)
+
+            val alpha = pixelComponent shr 24 and 0xff
+            val red = pixelComponent shr 16 and 0xff
+            val green = pixelComponent shr 8 and 0xff
+            val blue = pixelComponent and 0xff
+
+            val average = (red + green + blue) / 3
+
+            val pixelValue = average / 255.0f
+            val rgb = ARGB(alpha.toFloat(), pixelValue, pixelValue, pixelValue)
+            rowRgb.add(rgb)
+        }
+        rowRgbList.add(rowRgb)
+    }
+    return rowRgbList
 }

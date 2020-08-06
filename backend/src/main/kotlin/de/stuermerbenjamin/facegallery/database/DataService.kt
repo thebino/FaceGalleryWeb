@@ -11,7 +11,7 @@ import org.jetbrains.exposed.sql.selectAll
 
 class DataService {
     suspend fun getImages(): List<Image> = dbQuery {
-        val images = Images.selectAll()
+        val images = Images.selectAll().orderBy(Images.identifier)
 
         return@dbQuery images.mapNotNull {
             Image(it[Images.imagePath])
